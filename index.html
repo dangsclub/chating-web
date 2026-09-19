@@ -9,7 +9,7 @@
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f1f3f5}
 #app{position:fixed;top:0;left:0;right:0;bottom:0;display:grid;grid-template-rows:minmax(0,1fr) 70px;overflow:hidden}
-#messages{min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 5px;display:flex;flex-direction:column;gap:3px;-webkit-overflow-scrolling:touch}
+#messages{min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 7px 8px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}
 .empty{margin:auto;color:#999;font-size:13px}
 .msg{max-width:82%;padding:6px 8px;border-radius:12px;line-height:1.25;word-break:break-word;white-space:pre-wrap}
 .sent{align-self:flex-end;background:#008cba;color:#fff;border-bottom-right-radius:3px}
@@ -30,12 +30,44 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </form>
 </div>
 <script>
-const KEY="messages",messagesEl=document.getElementById("messages"),input=document.getElementById("input"),form=document.getElementById("form");
+const params=new URLSearchParams(location.search);
+const roomId=(params.get("room")||"default").trim()||"default";
+const KEY="messages:"+roomId;
+const messagesEl=document.getElementById("messages"),input=document.getElementById("input"),form=document.getElementById("form");
 let messages=[];
 try{const saved=JSON.parse(localStorage.getItem(KEY)||"[]");if(Array.isArray(saved))messages=saved}catch(e){}
 function time(v){return new Date(v).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})}
-function render(){messagesEl.replaceChildren();if(!messages.length){const e=document.createElement("div");e.className="empty";e.textContent="아직 메시지가 없습니다.";messagesEl.appendChild(e);return}for(const m of messages){const box=document.createElement("div");box.className="msg "+(m.type==="sent"?"sent":"received");box.textContent=m.text;const t=document.createElement("span");t.className="time";t.textContent=time(m.timestamp);box.appendChild(t);messagesEl.appendChild(box)}requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight)}
-form.addEventListener("submit",e=>{e.preventDefault();const text=input.value.trim();if(!text)return;messages.push({text,type:"sent",timestamp:Date.now()});localStorage.setItem(KEY,JSON.stringify(messages));input.value="";render();input.focus()});
+function render(){
+  messagesEl.replaceChildren();
+  if(!messages.length){
+    const e=document.createElement("div");
+    e.className="empty";
+    e.textContent="아직 메시지가 없습니다.";
+    messagesEl.appendChild(e);
+    return;
+  }
+  for(const m of messages){
+    const box=document.createElement("div");
+    box.className="msg "+(m.type==="sent"?"sent":"received");
+    box.textContent=m.text;
+    const t=document.createElement("span");
+    t.className="time";
+    t.textContent=time(m.timestamp);
+    box.appendChild(t);
+    messagesEl.appendChild(box);
+  }
+  requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight);
+}
+form.addEventListener("submit",e=>{
+  e.preventDefault();
+  const text=input.value.trim();
+  if(!text)return;
+  messages.push({text,type:"sent",timestamp:Date.now(),room:roomId});
+  localStorage.setItem(KEY,JSON.stringify(messages));
+  input.value="";
+  render();
+  input.focus();
+});
 render();
 </script>
 </body>
