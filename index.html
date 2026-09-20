@@ -207,7 +207,11 @@ function renderRooms(){
     open.className="primary";
     open.textContent="입장";
     open.onclick=()=>showChat(token,r.name);
-    card.append(info,open);
+    const action=document.createElement("button");
+    action.className=r.ownerUid===currentUid?"danger":"iconbtn";
+    action.textContent=r.ownerUid===currentUid?"삭제":"나가기";
+    action.onclick=()=>leaveRoom(token,r);
+    card.append(info,open,action);
     roomList.appendChild(card);
   }
 }
@@ -222,7 +226,7 @@ async function createRoom(name){
     name,
     ownerUid:currentUid,
     createdAt:now,
-    members:{[currentUid]:true},\n    memberNames:{[currentUid]:currentDisplayName}
+    members:{[currentUid]:true}, memberNames:{[currentUid]:currentDisplayName}
   };
   updates["users/"+currentUid+"/rooms/"+token]={
     name,
@@ -407,6 +411,7 @@ async function acceptInvite(token){
       const now=Date.now();
       const updates={};
       updates["rooms/"+token+"/members/"+currentUid]=true;
+      updates["rooms/"+token+"/memberNames/"+currentUid]=currentDisplayName;
       updates["users/"+currentUid+"/rooms/"+token]={
         name:room.name||"이름 없는 대화방",
         ownerUid:room.ownerUid||"",
