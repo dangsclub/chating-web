@@ -343,12 +343,14 @@ async function acceptInvite(token){
     return;
   }
   const invite=inviteSnap.val();
-  const roomSnap=await get(ref(db,"rooms/"+token));
-  if(!roomSnap.exists()){
-    showModal("초대 링크 오류","존재하지 않거나 이미 삭제된 대화방입니다.","확인",showHome);
+  if(invite.roomId!==token){
+    showModal("초대 링크 오류","올바르지 않은 초대 링크입니다.","확인",showHome);
     return;
   }
-  const room=roomSnap.val();
+  const room={
+    name:invite.name||"이름 없는 대화방",
+    ownerUid:invite.ownerUid||""
+  };
   if(room.members&&room.members[currentUid]){
     await loadRoomsOnce();
     history.replaceState({},document.title,location.pathname);
