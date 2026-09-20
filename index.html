@@ -22,7 +22,7 @@ button{cursor:pointer}
 .roomCard{background:#fff;border:1px solid #e3e3e3;border-radius:14px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
 .roomInfo{flex:1;min-width:0}
 .roomName{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.roomMeta{font-size:11px;color:#999;margin-top:4px}
+.roomMeta{font-size:11px;color:#999;margin-top:4px}.roomActions{display:flex;gap:6px}.memberList{max-height:280px;overflow:auto}.memberRow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #eee}.memberName{font-size:14px}.memberRole{font-size:11px;color:#999}.sender{display:block;font-size:10px;font-weight:700;margin-bottom:2px;opacity:.75}.msg .time{display:block}
 .empty{margin:auto;color:#999;font-size:13px;text-align:center;padding:30px}
 .bottom{padding:10px 14px 18px;background:#fff;border-top:1px solid #ddd}
 .bottom button{width:100%}
@@ -59,7 +59,7 @@ button{cursor:pointer}
   <header class="header">
     <button id="backBtn" class="iconbtn">←</button>
     <h1 id="chatTitle">대화방</h1>
-    <button id="inviteBtn" class="iconbtn">초대</button>
+    <button id="membersBtn" class="iconbtn">참여자</button><button id="inviteBtn" class="iconbtn">초대</button>
   </header>
   <main id="messages"></main>
   <form id="form">
@@ -115,7 +115,7 @@ const modalBody=document.getElementById("modalBody");
 const modalOk=document.getElementById("modalOk");
 const modalCancel=document.getElementById("modalCancel");
 
-let db,auth,currentUid=null;
+let db,auth,currentUid=null,currentDisplayName="사용자";
 let rooms={};
 let currentRoomToken=null;
 let messagesUnsubscribe=null;
@@ -149,6 +149,17 @@ function makeToken(){
   const a=new Uint8Array(24);
   crypto.getRandomValues(a);
   return [...a].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+
+function getDisplayName(){
+  let name=(localStorage.getItem("chatDisplayName")||"").trim();
+  if(!name){
+    name=(prompt("대화방에서 사용할 이름을 입력하세요.","사용자")||"사용자").trim();
+    if(!name)name="사용자";
+    name=name.slice(0,20);
+    localStorage.setItem("chatDisplayName",name);
+  }
+  return name;
 }
 
 function time(v){
@@ -211,7 +222,7 @@ async function createRoom(name){
     name,
     ownerUid:currentUid,
     createdAt:now,
-    members:{[currentUid]:true}
+    members:{[currentUid]:true},\n    memberNames:{[currentUid]:currentDisplayName}
   };
   updates["users/"+currentUid+"/rooms/"+token]={
     name,
@@ -291,7 +302,7 @@ function subscribeMessages(token){
 async function sendMessage(text){
   if(!currentRoomToken||!currentUid)throw new Error("인증이 필요합니다.");
   await push(ref(db,"rooms/"+currentRoomToken+"/messages"),{
-    text,uid:currentUid,timestamp:Date.now()
+    text,uid:currentUid,senderName:currentDisplayName,timestamp:Date.now()
   });
 }
 
@@ -305,6 +316,37 @@ form.onsubmit=async e=>{
   input.focus();
 };
 
+async function leaveRoom(token,room){
+  const isOwner=room.ownerUid===currentUid;
+  showModal(isOwner?"대화방 삭제":"대화방 나가기",
+    isOwner?"이 대화방을 내 목록에서 삭제할까요?":"이 대화방에서 나갈까요?",
+    isOwner?"삭제":"나가기",
+    async()=>{
+      const updates={};
+      updates["users/"+currentUid+"/rooms/"+token]=null;
+      updates["rooms/"+token+"/members/"+currentUid]=null;
+      updates["rooms/"+token+"/memberNames/"+currentUid]=null;
+      await update(ref(db),updates);
+      if(currentRoomToken===token)showHome();
+      closeModal();
+    });
+}
+
+async function showMembers(){
+  if(!currentRoomToken)return;
+  const snap=await get(ref(db,"rooms/"+currentRoomToken+"/memberNames"));
+  const names=snap.val()||{};
+  const owner=(rooms[currentRoomToken]||{}).ownerUid;
+  const entries=Object.entries(names);
+  let html='<div class="memberList">';
+  if(!entries.length)html+='<div class="empty">참여자가 없습니다.</div>';
+  for(const [uid,name] of entries){
+    html+='<div class="memberRow"><span class="memberName">'+escapeHtml(name||"사용자")+'</span><span class="memberRole">'+(uid===owner?"방장":(uid===currentUid?"나":"참여자"))+'</span></div>';
+  }
+  html+='</div>';
+  showModal("참여자 · "+entries.length+"명",html,"닫기",closeModal);
+}
+document.getElementById("membersBtn").onclick=showMembers;
 document.getElementById("backBtn").onclick=showHome;
 
 async function createInvite(){
