@@ -116,6 +116,8 @@ const modalOk=document.getElementById("modalOk");
 const modalCancel=document.getElementById("modalCancel");
 
 let db,auth,currentUid=null,currentDisplayName="사용자";
+let authReadyResolve,authReadyReject;
+const authReady=new Promise((resolve,reject)=>{authReadyResolve=resolve;authReadyReject=reject;});
 let rooms={};
 let currentRoomToken=null;
 let messagesUnsubscribe=null;
@@ -217,6 +219,7 @@ function renderRooms(){
 }
 
 async function createRoom(name){
+  await authReady;
   name=name.trim();
   if(!name)return;
   const token=makeToken();
@@ -247,7 +250,12 @@ document.getElementById("createBtn").onclick=()=>{
     async()=>{
       const value=document.getElementById("modalInput").value;
       if(!value.trim())return;
-      await createRoom(value);
+      try{
+        await createRoom(value);
+      }catch(err){
+        console.error("createRoom failed",err);
+        alert("방 만들기에 실패했습니다.\\n"+(err?.message||err));
+      }
     }
   );
   setTimeout(()=>document.getElementById("modalInput")?.focus(),50);
@@ -321,18 +329,35 @@ form.onsubmit=async e=>{
 };
 
 async function leaveRoom(token,room){
+  await authReady;
   const isOwner=room.ownerUid===currentUid;
   showModal(isOwner?"대화방 삭제":"대화방 나가기",
     isOwner?"이 대화방을 내 목록에서 삭제할까요?":"이 대화방에서 나갈까요?",
     isOwner?"삭제":"나가기",
     async()=>{
-      const updates={};
-      updates["users/"+currentUid+"/rooms/"+token]=null;
-      updates["rooms/"+token+"/members/"+currentUid]=null;
-      updates["rooms/"+token+"/memberNames/"+currentUid]=null;
-      await update(ref(db),updates);
-      if(currentRoomToken===token)showHome();
-      closeModal();
+      try{
+        const updates={};
+        if(isOwner){
+          // 방장이 삭제하면 참여자들의 '내 대화방' 기록도 함께 정리합니다.
+          const memberSnap=await get(ref(db,"rooms/"+token+"/members"));
+          const members=memberSnap.val()||{};
+          for(const uid of Object.keys(members)){
+            updates["users/"+uid+"/rooms/"+token]=null;
+          }
+          updates["invites/"+token]=null;
+          updates["rooms/"+token]=null;
+        }else{
+          updates["users/"+currentUid+"/rooms/"+token]=null;
+          updates["rooms/"+token+"/members/"+currentUid]=null;
+          updates["rooms/"+token+"/memberNames/"+currentUid]=null;
+        }
+        await update(ref(db),updates);
+        closeModal();
+        if(currentRoomToken===token)showHome();
+      }catch(err){
+        console.error("room delete/leave failed",err);
+        alert("처리하지 못했습니다.\\n"+(err?.message||err));
+      }
     });
 }
 
@@ -459,6 +484,8 @@ async function start(){
     onAuthStateChanged(auth,async user=>{
       if(!user)return;
       currentUid=user.uid;
+      currentDisplayName=getDisplayName();
+      authReadyResolve();
       subscribeRooms();
       if(inviteToken)await acceptInvite(inviteToken);
       else if(oldRoom){
@@ -468,8 +495,9 @@ async function start(){
     });
     await signInAnonymously(auth);
   }catch(err){
+    authReadyReject(err);
     console.error(err);
-    roomList.innerHTML='<div class="empty">Firebase 연결에 실패했습니다.</div>';
+    roomList.innerHTML='<div class="empty">Firebase 연결에 실패했습니다.<br>'+escapeHtml(err?.message||String(err))+'</div>';
   }
 }
 start();
