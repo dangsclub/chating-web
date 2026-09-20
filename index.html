@@ -338,9 +338,11 @@ async function leaveRoom(token,room){
       try{
         const updates={};
         if(isOwner){
-          // Firebase 보안 규칙과 충돌하지 않도록 방 삭제는 rooms 경로만 처리합니다.
-          // 내 목록과 초대 기록은 별도 정리 대상으로 남겨두고 방 자체를 먼저 삭제합니다.
+          // 방 데이터와 내 대화방 목록을 함께 삭제합니다.
+          // 초대 기록은 현재 Firebase 규칙에서 삭제 권한 충돌이 생길 수 있어
+          // 별도로 건드리지 않습니다.
           updates["rooms/"+token]=null;
+          updates["users/"+currentUid+"/rooms/"+token]=null;
         }else{
           updates["users/"+currentUid+"/rooms/"+token]=null;
           updates["rooms/"+token+"/members/"+currentUid]=null;
