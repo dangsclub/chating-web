@@ -267,11 +267,29 @@ async function loadRoomsOnce(){
   renderRooms();
 }
 
+async function refreshRooms(){
+  const source=rooms;
+  const valid={};
+  for(const [token,room] of Object.entries(source)){
+    try{
+      const snap=await get(ref(db,"rooms/"+token));
+      if(snap.exists()){
+        valid[token]=room;
+      }
+    }catch(err){
+      // 이미 삭제된 방이거나 현재 사용자가 접근할 수 없는 방은 목록에서 숨깁니다.
+      console.warn("stale room hidden:",token,err?.message||err);
+    }
+  }
+  rooms=valid;
+  renderRooms();
+}
+
 function subscribeRooms(){
   if(roomsUnsubscribe)roomsUnsubscribe();
   roomsUnsubscribe=onValue(ref(db,"users/"+currentUid+"/rooms"),snap=>{
     rooms=snap.val()||{};
-    renderRooms();
+    refreshRooms();
   });
 }
 
