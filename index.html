@@ -332,18 +332,15 @@ async function leaveRoom(token,room){
   await authReady;
   const isOwner=room.ownerUid===currentUid;
   showModal(isOwner?"대화방 삭제":"대화방 나가기",
-    isOwner?"이 대화방을 내 목록에서 삭제할까요?":"이 대화방에서 나갈까요?",
+    isOwner?"이 대화방을 삭제할까요? 삭제하면 대화 내용과 초대 링크도 함께 삭제됩니다.":"이 대화방에서 나갈까요?",
     isOwner?"삭제":"나가기",
     async()=>{
       try{
         const updates={};
         if(isOwner){
-          // 방장이 삭제하면 참여자들의 '내 대화방' 기록도 함께 정리합니다.
-          const memberSnap=await get(ref(db,"rooms/"+token+"/members"));
-          const members=memberSnap.val()||{};
-          for(const uid of Object.keys(members)){
-            updates["users/"+uid+"/rooms/"+token]=null;
-          }
+          // 다른 사용자의 users 경로까지 한 번에 지우면 Firebase 규칙에 막힐 수 있으므로
+          // 방장은 방 자체와 자신의 목록만 삭제합니다.
+          updates["users/"+currentUid+"/rooms/"+token]=null;
           updates["invites/"+token]=null;
           updates["rooms/"+token]=null;
         }else{
