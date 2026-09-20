@@ -311,6 +311,12 @@ async function createInvite(){
   if(!currentRoomToken)return;
   const room=rooms[currentRoomToken];
   if(!room)return;
+  await set(ref(db,"invites/"+currentRoomToken),{
+    roomId:currentRoomToken,
+    name:room.name||"이름 없는 대화방",
+    ownerUid:room.ownerUid||currentUid,
+    createdAt:Date.now()
+  });
   const url=new URL(location.href);
   url.search="";
   url.searchParams.set("invite",currentRoomToken);
@@ -331,6 +337,12 @@ document.getElementById("inviteBtn").onclick=createInvite;
 
 async function acceptInvite(token){
   if(!token){showHome();return;}
+  const inviteSnap=await get(ref(db,"invites/"+token));
+  if(!inviteSnap.exists()){
+    showModal("초대 링크 오류","존재하지 않거나 이미 삭제된 초대 링크입니다.","확인",showHome);
+    return;
+  }
+  const invite=inviteSnap.val();
   const roomSnap=await get(ref(db,"rooms/"+token));
   if(!roomSnap.exists()){
     showModal("초대 링크 오류","존재하지 않거나 이미 삭제된 대화방입니다.","확인",showHome);
