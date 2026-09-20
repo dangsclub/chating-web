@@ -30,10 +30,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </form>
 </div>
 
-<!--
-  다음 단계에서 Firebase 설정값만 넣으면 실시간 채팅이 활성화됩니다.
-  현재는 서버 설정이 없으므로 localStorage 모드로 동작합니다.
--->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import {
@@ -45,21 +41,25 @@ import {
   orderByChild,
   limitToLast
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
 const firebaseConfig = {
-  // Firebase 콘솔에서 발급받은 값을 여기에 넣습니다.
-  // apiKey: "...",
-  // authDomain: "...",
-  // databaseURL: "...",
-  // projectId: "...",
-  // storageBucket: "...",
-  // messagingSenderId: "...",
-  // appId: "..."
+  apiKey: "AIzaSyChmbRsz03i6RUdTep5kSxfwBmBXkgmcuk",
+  authDomain: "my-chay.firebaseapp.com",
+  databaseURL: "https://my-chay-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "my-chay",
+  storageBucket: "my-chay.firebasestorage.app",
+  messagingSenderId: "39896419588",
+  appId: "1:39896419588:web:af181789ef1164bae35451",
+  measurementId: "G-YXJD0SK4Y1"
 };
 
 const params=new URLSearchParams(location.search);
 const roomId=(params.get("room")||"default").trim()||"default";
-const KEY="messages:"+roomId;
 
 const messagesEl=document.getElementById("messages");
 const input=document.getElementById("input");
@@ -68,6 +68,9 @@ const form=document.getElementById("form");
 let messages=[];
 let realtimeReady=false;
 let database=null;
+let auth=null;
+let currentUid=null;
+let messagesUnsubscribe=null;
 
 function time(v){
   return new Date(v).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
@@ -81,14 +84,14 @@ function render(){
     e.className="empty";
     e.textContent=realtimeReady
       ? "대화방 "+roomId+" · 아직 메시지가 없습니다."
-      : "대화방 "+roomId+" · 실시간 서버 설정을 기다리는 중";
+      : "Firebase 연결 중...";
     messagesEl.appendChild(e);
     return;
   }
 
   for(const m of messages){
     const box=document.createElement("div");
-    box.className="msg "+(m.type==="sent"?"sent":"received");
+    box.className="msg "+(m.uid===currentUid?"sent":"received");
     box.textContent=m.text;
 
     const t=document.createElement("span");
@@ -102,73 +105,75 @@ function render(){
   requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight);
 }
 
-function loadLocal(){
-  try{
-    const saved=JSON.parse(localStorage.getItem(KEY)||"[]");
-    if(Array.isArray(saved))messages=saved;
-  }catch(e){
-    messages=[];
-  }
-  render();
-}
-
 async function sendMessage(text){
-  if(!text)return;
-
-  if(!realtimeReady){
-    messages.push({
-      text,
-      type:"sent",
-      timestamp:Date.now(),
-      room:roomId
-    });
-    localStorage.setItem(KEY,JSON.stringify(messages));
-    render();
-    return;
+  if(!realtimeReady || !currentUid){
+    throw new Error("Firebase 인증이 완료되지 않았습니다.");
   }
 
   await push(ref(database,"rooms/"+encodeURIComponent(roomId)+"/messages"),{
     text,
+    uid:currentUid,
     timestamp:Date.now()
   });
 }
 
-function startRealtime(){
-  if(!firebaseConfig.apiKey || !firebaseConfig.databaseURL){
-    loadLocal();
-    return;
-  }
+function subscribeMessages(){
+  if(messagesUnsubscribe)messagesUnsubscribe();
 
+  const messagesRef=query(
+    ref(database,"rooms/"+encodeURIComponent(roomId)+"/messages"),
+    orderByChild("timestamp"),
+    limitToLast(200)
+  );
+
+  messagesUnsubscribe=onValue(messagesRef,(snapshot)=>{
+    const data=snapshot.val()||{};
+    messages=Object.values(data)
+      .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))
+      .map(m=>({
+        text:String(m.text||""),
+        uid:String(m.uid||""),
+        timestamp:Number(m.timestamp)||Date.now()
+      }));
+
+    render();
+  },(error)=>{
+    console.error("Firebase 데이터 읽기 실패:",error);
+    realtimeReady=false;
+    const e=document.createElement("div");
+    e.className="empty";
+    e.textContent="Firebase 데이터베이스 권한을 확인해주세요.";
+    messagesEl.replaceChildren(e);
+  });
+}
+
+async function startRealtime(){
   try{
     const app=initializeApp(firebaseConfig);
     database=getDatabase(app);
-    realtimeReady=true;
+    auth=getAuth(app);
 
-    const messagesRef=query(
-      ref(database,"rooms/"+encodeURIComponent(roomId)+"/messages"),
-      orderByChild("timestamp"),
-      limitToLast(200)
-    );
+    onAuthStateChanged(auth,(user)=>{
+      if(!user){
+        currentUid=null;
+        realtimeReady=false;
+        return;
+      }
 
-    onValue(messagesRef,(snapshot)=>{
-      const data=snapshot.val()||{};
-      messages=Object.values(data)
-        .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))
-        .map(m=>({
-          text:String(m.text||""),
-          type:"received",
-          timestamp:Number(m.timestamp)||Date.now(),
-          room:roomId
-        }));
-
+      currentUid=user.uid;
+      realtimeReady=true;
+      subscribeMessages();
       render();
     });
 
-    render();
+    await signInAnonymously(auth);
   }catch(error){
-    console.error("Firebase 초기화 실패:",error);
+    console.error("Firebase 초기화/인증 실패:",error);
     realtimeReady=false;
-    loadLocal();
+    const e=document.createElement("div");
+    e.className="empty";
+    e.textContent="Firebase 연결에 실패했습니다. 콘솔 설정을 확인해주세요.";
+    messagesEl.replaceChildren(e);
   }
 }
 
@@ -185,7 +190,7 @@ form.addEventListener("submit",async e=>{
   }catch(error){
     console.error("메시지 전송 실패:",error);
     input.value=text;
-    alert("메시지를 보내지 못했습니다. Firebase 설정을 확인해주세요.");
+    alert("메시지를 보내지 못했습니다. Firebase 인증/보안 규칙을 확인해주세요.");
   }
 
   input.focus();
