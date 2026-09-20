@@ -3,200 +3,415 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>모바일 대화방</title>
+<title>대화방</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f1f3f5}
-#app{position:fixed;top:0;left:0;right:0;bottom:0;display:grid;grid-template-rows:minmax(0,1fr) 70px;overflow:hidden}
-#messages{min-height:0;overflow-y:auto;overflow-x:hidden;padding:28px 9px 12px;display:flex;flex-direction:column;gap:6px;-webkit-overflow-scrolling:touch}
-.empty{margin:auto;color:#999;font-size:13px;text-align:center}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f1f3f5;color:#222}
+button,input{font:inherit}
+button{cursor:pointer}
+#app{position:fixed;inset:0;overflow:hidden}
+.view{height:100%;display:flex;flex-direction:column}
+.hidden{display:none!important}
+.header{height:56px;flex:0 0 56px;background:#fff;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:8px;padding:0 12px}
+.header h1{font-size:17px;margin:0;flex:1}
+.iconbtn{border:0;background:#f1f3f5;border-radius:10px;padding:8px 10px;font-size:13px}
+.primary{border:0;background:#008cba;color:#fff;border-radius:12px;padding:10px 14px;font-weight:700}
+.danger{border:0;background:#fff0f0;color:#c33;border-radius:10px;padding:8px 10px}
+#roomList{flex:1;overflow:auto;padding:14px}
+.roomCard{background:#fff;border:1px solid #e3e3e3;border-radius:14px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+.roomInfo{flex:1;min-width:0}
+.roomName{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.roomMeta{font-size:11px;color:#999;margin-top:4px}
+.empty{margin:auto;color:#999;font-size:13px;text-align:center;padding:30px}
+.bottom{padding:10px 14px 18px;background:#fff;border-top:1px solid #ddd}
+.bottom button{width:100%}
+#messages{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:28px 9px 12px;display:flex;flex-direction:column;gap:6px;-webkit-overflow-scrolling:touch}
 .msg{max-width:82%;padding:6px 8px;border-radius:12px;line-height:1.25;word-break:break-word;white-space:pre-wrap}
 .sent{align-self:flex-end;background:#008cba;color:#fff;border-bottom-right-radius:3px}
 .received{align-self:flex-start;background:#fff;color:#333;border-bottom-left-radius:3px}
 .time{display:block;margin-top:1px;font-size:9px;opacity:.7;text-align:right}
-#form{height:70px;display:flex;align-items:flex-start;gap:6px;padding:8px 7px 16px;background:#fff;border-top:1px solid #ddd}
+#form{height:70px;flex:0 0 70px;display:flex;align-items:flex-start;gap:6px;padding:8px 7px 16px;background:#fff;border-top:1px solid #ddd}
 #input{flex:1;min-width:0;height:34px;border:1px solid #ddd;border-radius:17px;padding:0 11px;font-size:14px;outline:none}
 #input:focus{border-color:#008cba}
 #send{flex:0 0 auto;height:34px;border:0;border-radius:17px;padding:0 12px;background:#008cba;color:#fff;font-size:12px;font-weight:700}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
+.modalBox{width:min(420px,100%);background:#fff;border-radius:18px;padding:18px}
+.modalBox h2{font-size:18px;margin:0 0 14px}
+.modalBox input{width:100%;height:42px;border:1px solid #ddd;border-radius:10px;padding:0 12px;margin-bottom:10px}
+.modalActions{display:flex;gap:8px;justify-content:flex-end}
+.inviteBox{background:#f7f9fa;border-radius:12px;padding:12px;font-size:12px;word-break:break-all;margin:10px 0}
 </style>
 </head>
 <body>
 <div id="app">
-<main id="messages"></main>
-<form id="form">
-<input id="input" type="text" placeholder="메시지를 입력하세요" autocomplete="off">
-<button id="send" type="submit">보내기</button>
-</form>
+
+<section id="homeView" class="view">
+  <header class="header">
+    <h1>내 대화방</h1>
+    <button id="joinBtn" class="iconbtn">초대받기</button>
+  </header>
+  <main id="roomList"></main>
+  <div class="bottom"><button id="createBtn" class="primary">＋ 새 대화방 만들기</button></div>
+</section>
+
+<section id="chatView" class="view hidden">
+  <header class="header">
+    <button id="backBtn" class="iconbtn">←</button>
+    <h1 id="chatTitle">대화방</h1>
+    <button id="inviteBtn" class="iconbtn">초대</button>
+  </header>
+  <main id="messages"></main>
+  <form id="form">
+    <input id="input" type="text" placeholder="메시지를 입력하세요" autocomplete="off">
+    <button id="send" type="submit">보내기</button>
+  </form>
+</section>
+
+<div id="modal" class="modal hidden">
+  <div class="modalBox">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div class="modalActions">
+      <button id="modalCancel" class="iconbtn">취소</button>
+      <button id="modalOk" class="primary">확인</button>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import {
-  getDatabase,
-  ref,
-  push,
-  onValue,
-  query,
-  orderByChild,
-  limitToLast
+  getDatabase, ref, push, set, update, get, onValue, query,
+  orderByChild, limitToLast
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
 import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged
+  getAuth, signInAnonymously, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyChmbRsz03i6RUdTep5kSxfwBmBXkgmcuk",
-  authDomain: "my-chay.firebaseapp.com",
-  databaseURL: "https://my-chay-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "my-chay",
-  storageBucket: "my-chay.firebasestorage.app",
-  messagingSenderId: "39896419588",
-  appId: "1:39896419588:web:af181789ef1164bae35451",
-  measurementId: "G-YXJD0SK4Y1"
+const firebaseConfig={
+  apiKey:"AIzaSyChmbRsz03i6RUdTep5kSxfwBmBXkgmcuk",
+  authDomain:"my-chay.firebaseapp.com",
+  databaseURL:"https://my-chay-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"my-chay",
+  storageBucket:"my-chay.firebasestorage.app",
+  messagingSenderId:"39896419588",
+  appId:"1:39896419588:web:af181789ef1164bae35451",
+  measurementId:"G-YXJD0SK4Y1"
 };
 
-const params=new URLSearchParams(location.search);
-const roomId=(params.get("room")||"default").trim()||"default";
-
+const homeView=document.getElementById("homeView");
+const chatView=document.getElementById("chatView");
+const roomList=document.getElementById("roomList");
 const messagesEl=document.getElementById("messages");
 const input=document.getElementById("input");
 const form=document.getElementById("form");
+const chatTitle=document.getElementById("chatTitle");
+const modal=document.getElementById("modal");
+const modalTitle=document.getElementById("modalTitle");
+const modalBody=document.getElementById("modalBody");
+const modalOk=document.getElementById("modalOk");
+const modalCancel=document.getElementById("modalCancel");
 
-let messages=[];
-let realtimeReady=false;
-let database=null;
-let auth=null;
-let currentUid=null;
+let db,auth,currentUid=null;
+let rooms={};
+let currentRoomToken=null;
 let messagesUnsubscribe=null;
+let roomsUnsubscribe=null;
+let modalAction=null;
+
+const params=new URLSearchParams(location.search);
+const inviteToken=(params.get("invite")||"").trim();
+const oldRoom=(params.get("room")||"").trim();
+
+function showModal(title,body,ok,action){
+  modalTitle.textContent=title;
+  modalBody.innerHTML=body;
+  modalOk.textContent=ok||"확인";
+  modal.classList.remove("hidden");
+  modalAction=action||null;
+}
+function closeModal(){
+  modal.classList.add("hidden");
+  modalAction=null;
+}
+modalCancel.onclick=closeModal;
+modalOk.onclick=async()=>{
+  const action=modalAction;
+  if(action)await action();
+  else closeModal();
+};
+
+function makeToken(){
+  if(crypto.randomUUID)return crypto.randomUUID().replaceAll("-","");
+  const a=new Uint8Array(24);
+  crypto.getRandomValues(a);
+  return [...a].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
 
 function time(v){
   return new Date(v).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
 }
 
-function render(){
-  messagesEl.replaceChildren();
-
-  if(!messages.length){
-    const e=document.createElement("div");
-    e.className="empty";
-    e.textContent=realtimeReady
-      ? "대화방 "+roomId+" · 아직 메시지가 없습니다."
-      : "Firebase 연결 중...";
-    messagesEl.appendChild(e);
-    return;
-  }
-
-  for(const m of messages){
-    const box=document.createElement("div");
-    box.className="msg "+(m.uid===currentUid?"sent":"received");
-    box.textContent=m.text;
-
-    const t=document.createElement("span");
-    t.className="time";
-    t.textContent=time(m.timestamp);
-    box.appendChild(t);
-
-    messagesEl.appendChild(box);
-  }
-
-  requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight);
+function showHome(){
+  homeView.classList.remove("hidden");
+  chatView.classList.add("hidden");
+  currentRoomToken=null;
+  if(messagesUnsubscribe){messagesUnsubscribe();messagesUnsubscribe=null;}
 }
 
-async function sendMessage(text){
-  if(!realtimeReady || !currentUid){
-    throw new Error("Firebase 인증이 완료되지 않았습니다.");
-  }
+function showChat(token,name){
+  currentRoomToken=token;
+  chatTitle.textContent=name||"대화방";
+  homeView.classList.add("hidden");
+  chatView.classList.remove("hidden");
+  subscribeMessages(token);
+}
 
-  await push(ref(database,"rooms/"+encodeURIComponent(roomId)+"/messages"),{
-    text,
-    uid:currentUid,
-    timestamp:Date.now()
+function renderRooms(){
+  roomList.replaceChildren();
+  const list=Object.entries(rooms).sort((a,b)=>(b[1].joinedAt||0)-(a[1].joinedAt||0));
+  if(!list.length){
+    const e=document.createElement("div");
+    e.className="empty";
+    e.textContent="아직 참여한 대화방이 없습니다.\n새 대화방을 만들거나 초대 링크를 받아보세요.";
+    roomList.appendChild(e);
+    return;
+  }
+  for(const [token,r] of list){
+    const card=document.createElement("div");
+    card.className="roomCard";
+    const info=document.createElement("div");
+    info.className="roomInfo";
+    const name=document.createElement("div");
+    name.className="roomName";
+    name.textContent=r.name||"이름 없는 대화방";
+    const meta=document.createElement("div");
+    meta.className="roomMeta";
+    meta.textContent=r.ownerUid===currentUid?"내가 만든 방":"참여 중";
+    info.append(name,meta);
+    const open=document.createElement("button");
+    open.className="primary";
+    open.textContent="입장";
+    open.onclick=()=>showChat(token,r.name);
+    card.append(info,open);
+    roomList.appendChild(card);
+  }
+}
+
+async function createRoom(name){
+  name=name.trim();
+  if(!name)return;
+  const token=makeToken();
+  const now=Date.now();
+  const updates={};
+  updates["rooms/"+token]={
+    name,
+    ownerUid:currentUid,
+    createdAt:now,
+    members:{[currentUid]:true}
+  };
+  updates["users/"+currentUid+"/rooms/"+token]={
+    name,
+    ownerUid:currentUid,
+    joinedAt:now
+  };
+  await update(ref(db),updates);
+  closeModal();
+  await loadRoomsOnce();
+  showChat(token,name);
+}
+
+document.getElementById("createBtn").onclick=()=>{
+  showModal(
+    "새 대화방 만들기",
+    '<input id="modalInput" maxlength="40" placeholder="예: 가족방">',
+    "만들기",
+    async()=>{
+      const value=document.getElementById("modalInput").value;
+      if(!value.trim())return;
+      await createRoom(value);
+    }
+  );
+  setTimeout(()=>document.getElementById("modalInput")?.focus(),50);
+};
+
+async function loadRoomsOnce(){
+  const snap=await get(ref(db,"users/"+currentUid+"/rooms"));
+  rooms=snap.val()||{};
+  renderRooms();
+}
+
+function subscribeRooms(){
+  if(roomsUnsubscribe)roomsUnsubscribe();
+  roomsUnsubscribe=onValue(ref(db,"users/"+currentUid+"/rooms"),snap=>{
+    rooms=snap.val()||{};
+    renderRooms();
   });
 }
 
-function subscribeMessages(){
+function subscribeMessages(token){
   if(messagesUnsubscribe)messagesUnsubscribe();
-
-  const messagesRef=query(
-    ref(database,"rooms/"+encodeURIComponent(roomId)+"/messages"),
+  messagesEl.replaceChildren();
+  const q=query(
+    ref(db,"rooms/"+token+"/messages"),
     orderByChild("timestamp"),
     limitToLast(200)
   );
-
-  messagesUnsubscribe=onValue(messagesRef,(snapshot)=>{
-    const data=snapshot.val()||{};
-    messages=Object.values(data)
-      .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))
-      .map(m=>({
-        text:String(m.text||""),
-        uid:String(m.uid||""),
-        timestamp:Number(m.timestamp)||Date.now()
-      }));
-
-    render();
-  },(error)=>{
-    console.error("Firebase 데이터 읽기 실패:",error);
-    realtimeReady=false;
-    const e=document.createElement("div");
-    e.className="empty";
-    e.textContent="Firebase 데이터베이스 권한을 확인해주세요.";
-    messagesEl.replaceChildren(e);
+  messagesUnsubscribe=onValue(q,snap=>{
+    const data=snap.val()||{};
+    const list=Object.values(data).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+    messagesEl.replaceChildren();
+    if(!list.length){
+      const e=document.createElement("div");
+      e.className="empty";
+      e.textContent="아직 메시지가 없습니다.";
+      messagesEl.appendChild(e);
+      return;
+    }
+    for(const m of list){
+      const box=document.createElement("div");
+      box.className="msg "+(m.uid===currentUid?"sent":"received");
+      box.textContent=String(m.text||"");
+      const t=document.createElement("span");
+      t.className="time";
+      t.textContent=time(Number(m.timestamp)||Date.now());
+      box.appendChild(t);
+      messagesEl.appendChild(box);
+    }
+    requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight);
+  },err=>{
+    console.error(err);
+    messagesEl.innerHTML='<div class="empty">이 대화방에 접근할 권한이 없습니다.</div>';
   });
 }
 
-async function startRealtime(){
-  try{
-    const app=initializeApp(firebaseConfig);
-    database=getDatabase(app);
-    auth=getAuth(app);
-
-    onAuthStateChanged(auth,(user)=>{
-      if(!user){
-        currentUid=null;
-        realtimeReady=false;
-        return;
-      }
-
-      currentUid=user.uid;
-      realtimeReady=true;
-      subscribeMessages();
-      render();
-    });
-
-    await signInAnonymously(auth);
-  }catch(error){
-    console.error("Firebase 초기화/인증 실패:",error);
-    realtimeReady=false;
-    const e=document.createElement("div");
-    e.className="empty";
-    e.textContent="Firebase 연결에 실패했습니다. 콘솔 설정을 확인해주세요.";
-    messagesEl.replaceChildren(e);
-  }
+async function sendMessage(text){
+  if(!currentRoomToken||!currentUid)throw new Error("인증이 필요합니다.");
+  await push(ref(db,"rooms/"+currentRoomToken+"/messages"),{
+    text,uid:currentUid,timestamp:Date.now()
+  });
 }
 
-form.addEventListener("submit",async e=>{
+form.onsubmit=async e=>{
   e.preventDefault();
-
   const text=input.value.trim();
   if(!text)return;
-
   input.value="";
-
-  try{
-    await sendMessage(text);
-  }catch(error){
-    console.error("메시지 전송 실패:",error);
-    input.value=text;
-    alert("메시지를 보내지 못했습니다. Firebase 인증/보안 규칙을 확인해주세요.");
-  }
-
+  try{await sendMessage(text);}
+  catch(err){console.error(err);input.value=text;alert("메시지를 보내지 못했습니다.");}
   input.focus();
-});
+};
 
-startRealtime();
+document.getElementById("backBtn").onclick=showHome;
+
+async function createInvite(){
+  if(!currentRoomToken)return;
+  const room=rooms[currentRoomToken];
+  if(!room)return;
+  const url=new URL(location.href);
+  url.search="";
+  url.searchParams.set("invite",currentRoomToken);
+  const link=url.toString();
+  const body='<div>이 링크를 상대방에게 보내면 이 대화방에 참여할 수 있습니다.</div><div class="inviteBox">'+link+'</div>';
+  showModal("대화방 초대",body,"링크 복사",async()=>{
+    try{
+      await navigator.clipboard.writeText(link);
+      alert("초대 링크를 복사했습니다.");
+    }catch{
+      prompt("초대 링크를 복사하세요.",link);
+    }
+    closeModal();
+  });
+}
+
+document.getElementById("inviteBtn").onclick=createInvite;
+
+async function acceptInvite(token){
+  if(!token){showHome();return;}
+  const roomSnap=await get(ref(db,"rooms/"+token));
+  if(!roomSnap.exists()){
+    showModal("초대 링크 오류","존재하지 않거나 이미 삭제된 대화방입니다.","확인",showHome);
+    return;
+  }
+  const room=roomSnap.val();
+  if(room.members&&room.members[currentUid]){
+    await loadRoomsOnce();
+    history.replaceState({},document.title,location.pathname);
+    showChat(token,room.name);
+    return;
+  }
+  showModal(
+    "대화방 초대",
+    "<b>"+escapeHtml(room.name||"이름 없는 대화방")+"</b><br><br>이 대화방에 참여하시겠습니까?",
+    "참여하기",
+    async()=>{
+      const now=Date.now();
+      const updates={};
+      updates["rooms/"+token+"/members/"+currentUid]=true;
+      updates["users/"+currentUid+"/rooms/"+token]={
+        name:room.name||"이름 없는 대화방",
+        ownerUid:room.ownerUid||"",
+        joinedAt:now
+      };
+      await update(ref(db),updates);
+      closeModal();
+      history.replaceState({},document.title,location.pathname);
+      await loadRoomsOnce();
+      showChat(token,room.name);
+    }
+  );
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
+
+document.getElementById("joinBtn").onclick=()=>{
+  showModal(
+    "초대 링크로 참여",
+    '<input id="joinInput" placeholder="초대 코드 또는 링크 붙여넣기">',
+    "참여",
+    async()=>{
+      const value=document.getElementById("joinInput").value.trim();
+      if(!value)return;
+      let token=value;
+      try{
+        const u=new URL(value);
+        token=u.searchParams.get("invite")||u.searchParams.get("room")||"";
+      }catch{}
+      if(!token){alert("올바른 초대 링크를 입력해주세요.");return;}
+      closeModal();
+      await acceptInvite(token);
+    }
+  );
+  setTimeout(()=>document.getElementById("joinInput")?.focus(),50);
+};
+
+async function start(){
+  try{
+    const app=initializeApp(firebaseConfig);
+    db=getDatabase(app);
+    auth=getAuth(app);
+    onAuthStateChanged(auth,async user=>{
+      if(!user)return;
+      currentUid=user.uid;
+      subscribeRooms();
+      if(inviteToken)await acceptInvite(inviteToken);
+      else if(oldRoom){
+        // 기존 room= 링크는 새 초대 링크 형식으로도 사용할 수 있습니다.
+        await acceptInvite(oldRoom);
+      }
+    });
+    await signInAnonymously(auth);
+  }catch(err){
+    console.error(err);
+    roomList.innerHTML='<div class="empty">Firebase 연결에 실패했습니다.</div>';
+  }
+}
+start();
 </script>
 </body>
 </html>
